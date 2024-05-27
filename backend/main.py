@@ -1,50 +1,28 @@
 import os
+import time
 
+from db import database
 from dotenv import load_dotenv
-from fastapi import FastAPI, Response, status
-from openai import OpenAI
-from pydantic import BaseModel
-from services.router import ModelRouter, TextComplexityAnalyzer
+from fastapi import Depends, FastAPI
+from fastapi.security import HTTPBearer
+from routes import routers
+from sqlalchemy import text
+from sqlalchemy.orm import Session
 
 load_dotenv()
 
 
 app = FastAPI()
+security = HTTPBearer()
 
 
-class Prompt(BaseModel):
-    prompt: str
+@app.get("/")
+async def root(db: Session = Depends(database.get_db)):
+    a = db.execute(text("SELECT * FROM users")).fetchone()
+    print(a)
+    return {"healthcheck": "alive"}
 
-
-@app.post("/")
-def prompt(prompt: Prompt):
-    client = OpenAI(
-        api_key=os.getenv("OPENAI_API_KEY")
-    )
-
-    response = client.chat.completions.create(
-        model="gpt-4",
-        messages=[
-            {"role": "user", "content": prompt.prompt}
-        ]
-    )
-
-    tokens_used = response.usage.total_tokens
-
-    cost_per_token = 30 / 1000
-    cost = tokens_used * cost_per_token
-
-    router = ModelRouter()
-    result = router.generate_response(prompt.prompt)
-
-    return {
-        "gpt4": {
-            "response": response.choices[0].message.content,
-            "cost": cost
-        },
-        "router": {
-            "response": result[0],
-            "cost": 0,
-            "model": result[1]
-        }
-    }
+app.include_router(
+    routers.router,
+    prefix="/api/v1/routers",
+)
